@@ -1,0 +1,187 @@
+<div style="text-align:center; background: #0a0a12; margin: 0; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; flex-direction: column; font-family: 'Arial';">
+  
+  <div style="margin-bottom: 10px; color: white;">
+    <h1 style="color: #ff4d4d; margin: 5px; text-shadow: 0 0 15px #ff4d4d;">🌈 ROBLOX BUG FIX V15</h1>
+    <div style="font-size: 16px;">
+        모드: <span id="modeText" style="color: #ffcc00; font-weight: bold;">만들기 모드</span> | 
+        선택: <span id="itemText" style="color: #00f2ff;">일반 발판(1)</span>
+    </div>
+    <div id="statusText" style="color: #ff4d4d; font-weight: bold; font-size: 20px; height: 25px; margin-top: 5px;"></div>
+  </div>
+
+  <div id="viewport" style="position: relative; width: 800px; height: 450px; border: 5px solid #00f2ff; border-radius: 15px; overflow: hidden; background: #050505;">
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+    
+    <div id="ui-panel" style="position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 5px;">
+        <button onclick="toggleMode()" style="padding: 10px; cursor: pointer; background: #5d64ff; color: white; border: none; border-radius: 5px; font-weight: bold;">모드 전환 (Tab)</button>
+        <button onclick="saveMap()" style="padding: 10px; cursor: pointer; background: #4caf50; color: white; border: none; border-radius: 5px; font-weight: bold;">저장</button>
+        <button onclick="clearMap()" style="padding: 10px; cursor: pointer; background: #ff4d4d; color: white; border: none; border-radius: 5px; font-weight: bold;">전체 삭제</button>
+    </div>
+  </div>
+
+  <div style="color: #94a3b8; margin-top: 15px; font-size: 14px; font-weight: bold;">
+    양쪽 눈이 다 나오게 고쳤어요! 좌클릭(설치) / 우클릭(삭제)
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let mode = 'edit';
+let cameraX = 0, cameraY = 0;
+let hue = 0, trail = [], selectedType = 'safe';
+let isBoosted = false, boostTimeLeft = 0, isBurning = false, respawnTimer = 0, particles = [];
+
+let platforms = JSON.parse(localStorage.getItem('myFinalFixMap')) || [
+    { x: 0, y: 350, w: 1200, h: 100, type: 'safe' }
+];
+
+const player = { x: 200, y: 100, w: 40, h: 40, dy: 0, speed: 7.5, jump: 11.5, onGround: false };
+const keys = {};
+
+canvas.oncontextmenu = (e) => e.preventDefault();
+document.addEventListener('click', () => { if(document.activeElement.tagName === 'BUTTON') document.activeElement.blur(); });
+
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if(e.code === 'Tab') { e.preventDefault(); toggleMode(); }
+    if(e.code === 'Digit1') { selectedType = 'safe'; updateUI(); }
+    if(e.code === 'Digit2') { selectedType = 'lava'; updateUI(); }
+    if(e.code === 'Digit3') { selectedType = 'boost'; updateUI(); }
+    if(e.code === 'Space') e.preventDefault();
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+function updateUI() {
+    const names = { safe: "일반 발판(1)", lava: "용암(2)", boost: "10배 속도UP(3)" };
+    document.getElementById('itemText').innerText = names[selectedType];
+}
+
+canvas.addEventListener('mousedown', e => {
+    if(mode !== 'edit') return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left + cameraX;
+    const mouseY = e.clientY - rect.top + cameraY;
+
+    if (e.button === 0) {
+        platforms.push({ x: mouseX - 50, y: mouseY - 10, w: 100, h: 20, type: selectedType });
+    } else if (e.button === 2) {
+        for (let i = platforms.length - 1; i >= 0; i--) {
+            let p = platforms[i];
+            if (mouseX > p.x && mouseX < p.x + p.w && mouseY > p.y && mouseY < p.y + p.h) {
+                platforms.splice(i, 1); break; 
+            }
+        }
+    }
+});
+
+function toggleMode() {
+    mode = (mode === 'edit') ? 'play' : 'edit';
+    document.getElementById('modeText').innerText = mode === 'edit' ? "만들기 모드" : "플레이 모드";
+    resetPlayerState();
+}
+
+function resetPlayerState() {
+    player.x = 200; player.y = 100; player.dy = 0;
+    player.speed = 7.5; isBoosted = false; isBurning = false; respawnTimer = 0;
+    trail = []; particles = [];
+    document.getElementById('statusText').innerText = "";
+    if(mode === 'play') { cameraX = player.x - 380; cameraY = player.y - 210; }
+}
+
+function saveMap() { localStorage.setItem('myFinalFixMap', JSON.stringify(platforms)); alert("저장됨!"); }
+function clearMap() { if(confirm("초기화?")) { platforms = [{x:0,y:350,w:1200,h:100,type:'safe'}]; resetPlayerState(); } }
+
+function update() {
+    hue = (hue + 4) % 360;
+    if(mode === 'play') {
+        if(isBoosted) {
+            boostTimeLeft -= 1/60;
+            if(boostTimeLeft <= 0) { isBoosted = false; player.speed = 7.5; }
+        }
+        if(isBurning) {
+            respawnTimer -= 1/60;
+            for(let i=0; i<3; i++) particles.push({ x: player.x+Math.random()*player.w, y: player.y+player.h, vx: (Math.random()-0.5)*4, vy: -Math.random()*6, life: 1, color: "orange" });
+            if(respawnTimer <= 0) resetPlayerState();
+        }
+        if (keys['ArrowLeft']) player.x -= player.speed;
+        if (keys['ArrowRight']) player.x += player.speed;
+        if (keys['Space'] && player.onGround) { player.dy = -player.jump; player.onGround = false; }
+        player.y += player.dy; player.dy += 0.8;
+        trail.push({ x: player.x, y: player.y, h: isBurning ? 0 : hue });
+        if(trail.length > (isBoosted ? 50 : 20)) trail.shift();
+        player.onGround = false;
+        platforms.forEach(p => {
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y + player.h > p.y && player.y + player.h < p.y + p.h + player.dy && player.dy >= 0) {
+                if(p.type === 'lava' && !isBurning) { isBurning = true; respawnTimer = 3; }
+                else if(p.type !== 'lava') { 
+                    player.y = p.y - player.h; player.dy = 0; player.onGround = true;
+                    if(p.type === 'boost' && !isBoosted) { player.speed = 75; isBoosted = true; boostTimeLeft = 5; }
+                }
+            }
+        });
+        particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; if(p.life <= 0) particles.splice(i, 1); });
+        if (player.y > 2000) resetPlayerState();
+        cameraX += (player.x - 380 - cameraX) * 0.1; cameraY += (player.y - 210 - cameraY) * 0.1;
+    } else {
+        if (keys['ArrowLeft']) cameraX -= 15; if (keys['ArrowRight']) cameraX += 15;
+        if (keys['ArrowUp']) cameraY -= 15; if (keys['ArrowDown']) cameraY += 15;
+    }
+}
+
+function draw() {
+    ctx.fillStyle = "#050505"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save(); ctx.translate(-cameraX, -cameraY);
+    particles.forEach(p => { ctx.fillStyle = p.color; ctx.globalAlpha = p.life; ctx.fillRect(p.x, p.y, 6, 6); });
+    ctx.globalAlpha = 1;
+    trail.forEach((t, index) => {
+        let size = (index / trail.length);
+        ctx.fillStyle = isBurning ? `rgba(255, 69, 0, ${size * 0.5})` : `hsla(${t.h}, 100%, 60%, ${size * 0.5})`;
+        ctx.fillRect(t.x + (player.w - player.w*size)/2, t.y + (player.h - player.h*size)/2, player.w*size, player.h*size);
+    });
+    platforms.forEach(p => {
+        ctx.fillStyle = p.type === 'safe' ? "#5d64ff" : (p.type === 'lava' ? "#ff4d4d" : "#ffff00");
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.strokeStyle = "white"; ctx.strokeRect(p.x, p.y, p.w, p.h);
+    });
+
+    // 플레이어 색상 설정
+    if(isBurning) ctx.fillStyle = (Math.floor(Date.now()/100)%2===0) ? "#ff4500":"#ffae00";
+    else if(isBoosted) ctx.fillStyle = "white";
+    else ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.strokeStyle = "white"; ctx.strokeRect(player.x, player.y, player.w, player.h);
+    
+    // 🌟 [핵심 수정] 양쪽 X자 눈 확실히 그리기
+    if(isBurning) {
+        ctx.strokeStyle = "black"; ctx.lineWidth = 3;
+        
+        // 왼쪽 눈 (위치 5)
+        ctx.beginPath();
+        ctx.moveTo(player.x + 5, player.y + 10);
+        ctx.lineTo(player.x + 15, player.y + 20);
+        ctx.moveTo(player.x + 15, player.y + 10);
+        ctx.lineTo(player.x + 5, player.y + 20);
+        ctx.stroke();
+
+        // 오른쪽 눈 (위치 25)
+        ctx.beginPath();
+        ctx.moveTo(player.x + 25, player.y + 10);
+        ctx.lineTo(player.x + 35, player.y + 20);
+        ctx.moveTo(player.x + 35, player.y + 10);
+        ctx.lineTo(player.x + 25, player.y + 20);
+        ctx.stroke();
+    } else {
+        ctx.fillStyle = isBoosted ? "black" : "white";
+        ctx.fillRect(player.x + 8, player.y + 10, 7, 7);
+        ctx.fillRect(player.x + 25, player.y + 10, 7, 7);
+    }
+    ctx.restore();
+}
+
+function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+gameLoop();
+</script>
