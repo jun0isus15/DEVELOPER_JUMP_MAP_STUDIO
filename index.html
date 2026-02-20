@@ -1,7 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DEVELOPER JUMP MAP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+</head>
 <div style="text-align:center; background: #0a0a12; margin: 0; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; flex-direction: column; font-family: 'Arial';">
   
   <div style="margin-bottom: 10px; color: white;">
-    <h1 style="color: #ff4d4d; margin: 5px; text-shadow: 0 0 15px #ff4d4d;">🌈 ROBLOX BUG FIX V15</h1>
+    <h1 style="color: #00f2ff; margin: 5px; text-shadow: 0 0 15px #00f2ff; letter-spacing: 2px;">DEVELOPER JUMP MAP</h1>
     <div style="font-size: 16px;">
         모드: <span id="modeText" style="color: #ffcc00; font-weight: bold;">만들기 모드</span> | 
         선택: <span id="itemText" style="color: #00f2ff;">일반 발판(1)</span>
@@ -20,7 +26,7 @@
   </div>
 
   <div style="color: #94a3b8; margin-top: 15px; font-size: 14px; font-weight: bold;">
-    양쪽 눈이 다 나오게 고쳤어요! 좌클릭(설치) / 우클릭(삭제)
+    좌클릭: 설치 | 우클릭: 삭제 | 1~5번 키로 발판 선택
   </div>
 </div>
 
@@ -31,13 +37,15 @@ const ctx = canvas.getContext('2d');
 let mode = 'edit';
 let cameraX = 0, cameraY = 0;
 let hue = 0, trail = [], selectedType = 'safe';
-let isBoosted = false, boostTimeLeft = 0, isBurning = false, respawnTimer = 0, particles = [];
+let isBoosted = false, boostTimeLeft = 0, isJumpBoosted = false, jumpBoostTimeLeft = 0, isBurning = false, respawnTimer = 0, particles = [];
 
-let platforms = JSON.parse(localStorage.getItem('myFinalFixMap')) || [
+let platforms = JSON.parse(localStorage.getItem('myDevJumpMap')) || [
     { x: 0, y: 350, w: 1200, h: 100, type: 'safe' }
 ];
 
-const player = { x: 200, y: 100, w: 40, h: 40, dy: 0, speed: 7.5, jump: 11.5, onGround: false };
+const NORMAL_JUMP = 11.5;
+const SUPER_JUMP = 23;
+const player = { x: 200, y: 100, w: 40, h: 40, dy: 0, speed: 7.5, jump: NORMAL_JUMP, onGround: false };
 const keys = {};
 
 canvas.oncontextmenu = (e) => e.preventDefault();
@@ -49,12 +57,14 @@ window.addEventListener('keydown', e => {
     if(e.code === 'Digit1') { selectedType = 'safe'; updateUI(); }
     if(e.code === 'Digit2') { selectedType = 'lava'; updateUI(); }
     if(e.code === 'Digit3') { selectedType = 'boost'; updateUI(); }
+    if(e.code === 'Digit4') { selectedType = 'jumpUp'; updateUI(); }
+    if(e.code === 'Digit5') { selectedType = 'ghost'; updateUI(); }
     if(e.code === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
 
 function updateUI() {
-    const names = { safe: "일반 발판(1)", lava: "용암(2)", boost: "10배 속도UP(3)" };
+    const names = { safe: "일반(1)", lava: "용암(2)", boost: "속도UP(3)", jumpUp: "점프UP(4)", ghost: "투명(5)" };
     document.getElementById('itemText').innerText = names[selectedType];
 }
 
@@ -84,33 +94,36 @@ function toggleMode() {
 
 function resetPlayerState() {
     player.x = 200; player.y = 100; player.dy = 0;
-    player.speed = 7.5; isBoosted = false; isBurning = false; respawnTimer = 0;
+    player.speed = 7.5; player.jump = NORMAL_JUMP;
+    isBoosted = false; isJumpBoosted = false; isBurning = false; respawnTimer = 0;
     trail = []; particles = [];
     document.getElementById('statusText').innerText = "";
     if(mode === 'play') { cameraX = player.x - 380; cameraY = player.y - 210; }
 }
 
-function saveMap() { localStorage.setItem('myFinalFixMap', JSON.stringify(platforms)); alert("저장됨!"); }
+function saveMap() { localStorage.setItem('myDevJumpMap', JSON.stringify(platforms)); alert("DEVELOPER JUMP MAP 저장 완료!"); }
 function clearMap() { if(confirm("초기화?")) { platforms = [{x:0,y:350,w:1200,h:100,type:'safe'}]; resetPlayerState(); } }
 
 function update() {
     hue = (hue + 4) % 360;
     if(mode === 'play') {
-        if(isBoosted) {
-            boostTimeLeft -= 1/60;
-            if(boostTimeLeft <= 0) { isBoosted = false; player.speed = 7.5; }
-        }
+        if(isBoosted) { boostTimeLeft -= 1/60; if(boostTimeLeft <= 0) { isBoosted = false; player.speed = 7.5; } }
+        if(isJumpBoosted) { jumpBoostTimeLeft -= 1/60; if(jumpBoostTimeLeft <= 0) { isJumpBoosted = false; player.jump = NORMAL_JUMP; } }
         if(isBurning) {
             respawnTimer -= 1/60;
+            document.getElementById('statusText').innerText = `🔥 LAVA BURNING (${Math.ceil(respawnTimer)}s)`;
             for(let i=0; i<3; i++) particles.push({ x: player.x+Math.random()*player.w, y: player.y+player.h, vx: (Math.random()-0.5)*4, vy: -Math.random()*6, life: 1, color: "orange" });
             if(respawnTimer <= 0) resetPlayerState();
         }
+
         if (keys['ArrowLeft']) player.x -= player.speed;
         if (keys['ArrowRight']) player.x += player.speed;
         if (keys['Space'] && player.onGround) { player.dy = -player.jump; player.onGround = false; }
         player.y += player.dy; player.dy += 0.8;
+        
         trail.push({ x: player.x, y: player.y, h: isBurning ? 0 : hue });
         if(trail.length > (isBoosted ? 50 : 20)) trail.shift();
+
         player.onGround = false;
         platforms.forEach(p => {
             if (player.x < p.x + p.w && player.x + player.w > p.x &&
@@ -118,7 +131,8 @@ function update() {
                 if(p.type === 'lava' && !isBurning) { isBurning = true; respawnTimer = 3; }
                 else if(p.type !== 'lava') { 
                     player.y = p.y - player.h; player.dy = 0; player.onGround = true;
-                    if(p.type === 'boost' && !isBoosted) { player.speed = 75; isBoosted = true; boostTimeLeft = 5; }
+                    if(p.type === 'boost') { player.speed = 75; isBoosted = true; boostTimeLeft = 5; }
+                    if(p.type === 'jumpUp') { player.jump = SUPER_JUMP; isJumpBoosted = true; jumpBoostTimeLeft = 5; }
                 }
             }
         });
@@ -136,52 +150,53 @@ function draw() {
     ctx.save(); ctx.translate(-cameraX, -cameraY);
     particles.forEach(p => { ctx.fillStyle = p.color; ctx.globalAlpha = p.life; ctx.fillRect(p.x, p.y, 6, 6); });
     ctx.globalAlpha = 1;
+
     trail.forEach((t, index) => {
         let size = (index / trail.length);
         ctx.fillStyle = isBurning ? `rgba(255, 69, 0, ${size * 0.5})` : `hsla(${t.h}, 100%, 60%, ${size * 0.5})`;
         ctx.fillRect(t.x + (player.w - player.w*size)/2, t.y + (player.h - player.h*size)/2, player.w*size, player.h*size);
     });
+
     platforms.forEach(p => {
-        ctx.fillStyle = p.type === 'safe' ? "#5d64ff" : (p.type === 'lava' ? "#ff4d4d" : "#ffff00");
+        if(p.type === 'safe') ctx.fillStyle = "#5d64ff";
+        else if(p.type === 'lava') ctx.fillStyle = "#ff4d4d";
+        else if(p.type === 'boost') ctx.fillStyle = "#ffff00";
+        else if(p.type === 'jumpUp') ctx.fillStyle = "#a020f0";
+        else if(p.type === 'ghost') {
+            if(mode === 'edit') ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+            else return;
+        }
         ctx.fillRect(p.x, p.y, p.w, p.h);
         ctx.strokeStyle = "white"; ctx.strokeRect(p.x, p.y, p.w, p.h);
     });
 
-    // 플레이어 색상 설정
-    if(isBurning) ctx.fillStyle = (Math.floor(Date.now()/100)%2===0) ? "#ff4500":"#ffae00";
-    else if(isBoosted) ctx.fillStyle = "white";
-    else ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+    if(isBurning) {
+        ctx.fillStyle = (Math.floor(Date.now()/100)%2===0) ? "#ff4500" : "#ffae00";
+        ctx.shadowBlur = 20; ctx.shadowColor = "#ff4500";
+    } else if(isBoosted) ctx.fillStyle = "white";
+    else { ctx.fillStyle = `hsl(${hue}, 100%, 50%)`; ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle; }
 
     ctx.fillRect(player.x, player.y, player.w, player.h);
-    ctx.strokeStyle = "white"; ctx.strokeRect(player.x, player.y, player.w, player.h);
+    ctx.shadowBlur = 0; ctx.strokeStyle = "white"; ctx.strokeRect(player.x, player.y, player.w, player.h);
     
-    // 🌟 [핵심 수정] 양쪽 X자 눈 확실히 그리기
     if(isBurning) {
         ctx.strokeStyle = "black"; ctx.lineWidth = 3;
-        
-        // 왼쪽 눈 (위치 5)
-        ctx.beginPath();
-        ctx.moveTo(player.x + 5, player.y + 10);
-        ctx.lineTo(player.x + 15, player.y + 20);
-        ctx.moveTo(player.x + 15, player.y + 10);
-        ctx.lineTo(player.x + 5, player.y + 20);
+        ctx.beginPath(); ctx.moveTo(player.x + 6, player.y + 12); ctx.lineTo(player.x + 16, player.y + 22);
+        ctx.moveTo(player.x + 16, player.y + 12); ctx.lineTo(player.x + 6, player.y + 22);
         ctx.stroke();
-
-        // 오른쪽 눈 (위치 25)
-        ctx.beginPath();
-        ctx.moveTo(player.x + 25, player.y + 10);
-        ctx.lineTo(player.x + 35, player.y + 20);
-        ctx.moveTo(player.x + 35, player.y + 10);
-        ctx.lineTo(player.x + 25, player.y + 20);
+        ctx.beginPath(); ctx.moveTo(player.x + 24, player.y + 12); ctx.lineTo(player.x + 34, player.y + 22);
+        ctx.moveTo(player.x + 34, player.y + 12); ctx.lineTo(player.x + 24, player.y + 22);
         ctx.stroke();
     } else {
         ctx.fillStyle = isBoosted ? "black" : "white";
         ctx.fillRect(player.x + 8, player.y + 10, 7, 7);
         ctx.fillRect(player.x + 25, player.y + 10, 7, 7);
     }
+
     ctx.restore();
 }
 
 function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
 gameLoop();
 </script>
+</html>
